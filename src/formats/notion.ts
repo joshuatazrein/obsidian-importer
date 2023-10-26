@@ -221,9 +221,9 @@ async function processZips(ctx: ImportContext, files: PickedFile[], callback: (f
 
 					// throw an error for Notion Markdown exports
 					if (entry.extension === 'md' && getNotionId(entry.name)) {
-						new Notice('Notion Markdown export detected. Please export Notion data to HTML instead.');
-						ctx.cancel();
-						throw new Error('Notion importer uses only HTML exports. Please use the correct format.');
+						new Notice('Notion Markdown export detected. Please export Notion data to HTML instead.')
+						ctx.cancel()
+						throw new Error('Notion importer uses only HTML exports. Please use the correct format.')
 					}
 
 					// Skip databses in CSV format

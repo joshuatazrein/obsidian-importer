@@ -38,10 +38,9 @@ export async function readToMarkdown(info: NotionResolverInfo, file: ZipEntryFil
 				if (property.title == 'Tags') {
 					property.title = 'tags';
 					if (typeof property.content === 'string') {
-						property.content = property.content.replace(/ /g, '-');
-					}
-					else if (property.content instanceof Array) {
-						property.content = property.content.map(tag => tag.replace(/ /g, '-'));
+						property.content = property.content.replace(/ /g, '-')
+					} else if (property.content instanceof Array) {
+						property.content = property.content.map(tag => tag.replace(/ /g, '-'))
 					}
 				}
 				frontMatter[property.title] = property.content;
@@ -222,6 +221,10 @@ const typesMap: Record<NotionProperty['type'], NotionPropertyType[]> = {
 	],
 };
 
+function singleLineBreaks(markdownBody: string) {
+	return markdownBody.replace(/\n\n(?!>)/g, '\n')
+}
+
 function parseProperty(property: HTMLTableRowElement): YamlProperty | undefined {
 	const notionType = property.className.match(/property-row-(.*)/)?.[1] as NotionPropertyType;
 	if (!notionType) {
@@ -345,22 +348,25 @@ function fixEquations(body: HTMLElement) {
 }
 
 function stripToSentence(paragraph: string) {
-	const firstSentence = paragraph.match(/^[^\.\?\!\n]*[\.\?\!]?/)?.[0];
-	return firstSentence ?? '';
+	const firstSentence = paragraph.match(/^[^\.\?\!\n]*[\.\?\!]?/)?.[0]
+	return firstSentence ?? ''
 }
 
 function isCallout(element: Element) {
-	return !!(/callout|bookmark/.test(element.getAttribute('class') ?? ''));
+	if (/callout|bookmark/.test(element.getAttribute('class') ?? '')) {
+		return true
+	}
+	return false
 }
 
 function fixNotionCallouts(body: HTMLElement) {
 	for (let callout of body.findAll('figure.callout')) {
-		const description = callout.children[1].textContent;
-		let calloutBlock = `> [!important]\n> ${description}\n`;
+		const description = callout.children[1].textContent
+		let calloutBlock = `> [!important]\n> ${description}\n`
 		if (callout.nextElementSibling && isCallout(callout.nextElementSibling)) {
-			calloutBlock += '\n';
+			calloutBlock += '\n'
 		}
-		callout.replaceWith(calloutBlock);
+		callout.replaceWith(calloutBlock)
 	}
 }
 
@@ -373,7 +379,7 @@ function fixNotionEmbeds(body: HTMLElement) {
 		let calloutBlock = `> [!info] ${title}\n` + `> ${description}\n` + `> [${link}](${link})\n`;
 		if (embed.nextElementSibling && isCallout(embed.nextElementSibling)) {
 			// separate callouts with spaces
-			calloutBlock += '\n';
+			calloutBlock += '\n'
 		}
 		embed.replaceWith(calloutBlock);
 	}

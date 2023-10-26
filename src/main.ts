@@ -290,6 +290,7 @@ export default class ImporterPlugin extends Plugin {
 			this.app.vault.delete(notionFolder, true);
 		}
 		// Create and open the importer on boot
+		
 		let modal = new ImporterModal(this.app, this);
 		modal.open();
 		// Select my importer
