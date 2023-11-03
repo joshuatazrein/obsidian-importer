@@ -58,7 +58,6 @@ export async function readToMarkdown(info: NotionResolverInfo, file: ZipEntryFil
 	encodeSpaces(body, info);
 	fixNotionDates(body);
 	fixEquations(body);
-	
 	// Some annoying elements Notion throws in as wrappers, which mess up .md
 	replaceElementsWithChildren(body, '.indented');
 	replaceElementsWithChildren(body, 'details');
