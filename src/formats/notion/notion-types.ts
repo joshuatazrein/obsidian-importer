@@ -64,15 +64,36 @@ export interface NotionAttachmentInfo {
 	fullLinkPathNeeded: boolean;
 }
 
+export interface NotionReplacements { 
+	leadingSpaces: string;
+	indentedBlocks: string;
+	shiftEnter: string;
+};
+
+export const DEFAULT_REPLACEMENTS: NotionReplacements = {
+	leadingSpaces: '&ensp;',
+	indentedBlocks: '&ensp;&ensp;&ensp;&ensp;',
+	shiftEnter: ''
+};
+
 export class NotionResolverInfo {
 	idsToFileInfo: Record<string, NotionFileInfo> = {};
 	pathsToAttachmentInfo: Record<string, NotionAttachmentInfo> = {};
 	attachmentPath: string;
 	singleLineBreaks: boolean;
+	preserveColoredText: boolean;
+	replacements: NotionReplacements;
 
-	constructor(attachmentPath: string, singleLineBreaks: boolean) {
+	constructor(attachmentPath: string, singleLineBreaks: boolean, preserveColoredText: boolean, replacements?: NotionReplacements) {
 		this.attachmentPath = attachmentPath;
 		this.singleLineBreaks = singleLineBreaks;
+		this.preserveColoredText = preserveColoredText;
+		if (replacements) {
+			this.replacements = replacements;
+		}
+		else {
+			this.replacements = { ...DEFAULT_REPLACEMENTS };
+		}
 	}
 
 	getPathForFile(fileInfo: NotionFileInfo | NotionAttachmentInfo) {
