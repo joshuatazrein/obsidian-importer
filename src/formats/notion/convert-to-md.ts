@@ -11,7 +11,6 @@ import {
 	stripNotionId,
 	stripParentDirectories,
 } from './notion-utils';
-import { ERR_INVALID_ENCRYPTION_STRENGTH } from '@zip.js/zip.js';
 
 export async function readToMarkdown(info: NotionResolverInfo, file: ZipEntryFile): Promise<string> {
 	const text = await file.readText();
@@ -111,7 +110,7 @@ function encodeSpaces(body: HTMLElement, info: NotionResolverInfo) {
 		if (childEl.childElementCount === 0 && childEl.textContent) {
 			let lines = childEl.innerHTML.split('\n');
 			for (let i = 0; i < lines.length; i ++) {
-				let line = lines[i]
+				let line = lines[i];
 
 				let j = 0;
 				while (/ /.test(line[j])) {
@@ -119,16 +118,16 @@ function encodeSpaces(body: HTMLElement, info: NotionResolverInfo) {
 				}
 
 				if (j > 0) {
-					const startSpaces = []
+					const startSpaces = [];
 					for (let k = 0; k < j; k ++) {
-						startSpaces.push(info.replacements.leadingSpaces)
+						startSpaces.push(info.replacements.leadingSpaces);
 					}
 					line = startSpaces.join('') + line.slice(j);
 				}
 				line = line.replace(/ /g, '&#32;').replace(/\t/g, '&emsp;');
-				lines[i] = line
+				lines[i] = line;
 			}
-			childEl.innerHTML = lines.join('\n')
+			childEl.innerHTML = lines.join('\n');
 		}
 		else if (childEl instanceof HTMLElement) encodeSpaces(childEl, info);
 	}
@@ -431,7 +430,7 @@ function splitBrsInFormatting(htmlString: string, tag: 'strong' | 'em') {
 		);
 	}
 
-	return htmlString
+	return htmlString;
 }
 
 function replaceTableOfContents(body: HTMLElement) {
@@ -449,7 +448,7 @@ function encodeNewlines(body: HTMLElement, info: NotionResolverInfo) {
 	// Since <br /> is ignored in codeblocks, we replace with newlines
 	for (const block of body.findAll('code')) {
 		for (const br of block.findAll('br')) {
-			br.replaceWith('\n')
+			br.replaceWith('\n');
 		}
 	}
 }
