@@ -5,18 +5,20 @@ import { ImportContext } from '../main';
 import { readZip, ZipEntryFile } from '../zip';
 import { cleanDuplicates } from './notion/clean-duplicates';
 import { readToMarkdown } from './notion/convert-to-md';
-import { NotionResolverInfo } from './notion/notion-types';
+import { DEFAULT_REPLACEMENTS, NotionReplacements, NotionResolverInfo } from './notion/notion-types';
 import { getNotionId } from './notion/notion-utils';
 import { parseFileInfo } from './notion/parse-info';
 
 export class NotionImporter extends FormatImporter {
-	
-	
 	parentsInSubfolders: boolean;
 	singleLineBreaks: boolean;
+	preserveColoredText: boolean;
+	replacementsContainer: HTMLDivElement;
+	replacements: undefined | NotionReplacements;
 
 	init() {
 		this.parentsInSubfolders = true;
+		
 		this.addFileChooserSetting('Exported Notion', ['zip']);
 		this.addOutputLocationSetting('Notion');
 		new Setting(this.modal.contentEl)
@@ -34,6 +36,64 @@ export class NotionImporter extends FormatImporter {
 				.onChange((value) => {
 					this.singleLineBreaks = value;
 				}));
+
+		new Setting(this.modal.contentEl)
+			.setName('Preserve colored text')
+			.setDesc('Preserve colored text from Notion (default is to encode as Markdown highlights).')
+			.addToggle((toggle) => toggle
+				.setValue(this.preserveColoredText)
+				.onChange((value) => {
+					this.preserveColoredText = value;
+				}));
+
+		new Setting(this.modal.contentEl).setName('Custom replacements').setDesc('Replace spacing with custom formatting characters').addToggle(toggle => {
+			toggle.onChange(value => {
+				if (value) {
+					this.replacements = { ...DEFAULT_REPLACEMENTS };
+					new Setting(this.replacementsContainer)
+						.setName('Leading spaces')
+						.setDesc('Change leading spaces to custom unicode:')
+						.addText(text => {
+							if (!this.replacements) throw new Error('invariant');
+							text.setValue(this.replacements.leadingSpaces);
+							text.onChange(value => {
+								if (!this.replacements) throw new Error('invariant');
+								this.replacements.leadingSpaces = value;
+							});
+						});
+					new Setting(this.replacementsContainer)
+						.setName('Indented blocks')
+						.setDesc('Change indented blocks to custom unicode:')
+						.addText(text => {
+							if (!this.replacements) throw new Error('invariant');
+							text.setValue(this.replacements.indentedBlocks);
+							text.onChange(value => {
+								if (!this.replacements) throw new Error('invariant');
+								this.replacements.indentedBlocks = value;
+							});
+						});
+					new Setting(this.replacementsContainer)
+						.setName('Newlines within blocks')
+						.setDesc('Change newlines within blocks to custom unicode:')
+						.addText(text => {
+							if (!this.replacements) throw new Error('invariant');
+							text.setValue(this.replacements.shiftEnter);
+							text.onChange(value => {
+								if (!this.replacements) throw new Error('invariant');
+								this.replacements.shiftEnter = value;
+							});
+						});
+				}
+				else {
+					this.replacements = undefined;
+					this.replacementsContainer.empty();
+				}
+			});
+		});
+		
+
+		this.replacementsContainer = document.createElement('div');
+		this.modal.contentEl.appendChild(this.replacementsContainer);
 	}
 
 	async import(ctx: ImportContext): Promise<void> {
@@ -54,7 +114,7 @@ export class NotionImporter extends FormatImporter {
 		// As a convention, all parent folders should end with "/" in this importer.
 		if (!targetFolderPath?.endsWith('/')) targetFolderPath += '/';
 
-		const info = new NotionResolverInfo(vault.getConfig('attachmentFolderPath') ?? '', this.singleLineBreaks);
+		const info = new NotionResolverInfo(vault.getConfig('attachmentFolderPath') ?? '', this.singleLineBreaks, this.preserveColoredText, this.replacements);
 
 		// loads in only path & title information to objects
 		ctx.status('Looking for files to import');

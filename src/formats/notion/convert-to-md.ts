@@ -11,6 +11,7 @@ import {
 	stripNotionId,
 	stripParentDirectories,
 } from './notion-utils';
+import { ERR_INVALID_ENCRYPTION_STRENGTH } from '@zip.js/zip.js';
 
 export async function readToMarkdown(info: NotionResolverInfo, file: ZipEntryFile): Promise<string> {
 	const text = await file.readText();
@@ -53,32 +54,37 @@ export async function readToMarkdown(info: NotionResolverInfo, file: ZipEntryFil
 	fixNotionEmbeds(body);
 	fixNotionCallouts(body);
 	stripLinkFormatting(body);
-	encodeNewlinesToBr(body);
+	encodeNewlines(body, info);
+	encodeSpaces(body, info);
 	fixNotionDates(body);
 	fixEquations(body);
-
+	
 	// Some annoying elements Notion throws in as wrappers, which mess up .md
-	replaceElementsWithChildren(body, 'div.indented');
+	replaceElementsWithChildren(body, '.indented');
 	replaceElementsWithChildren(body, 'details');
 	fixToggleHeadings(body);
 	fixNotionLists(body, 'ul');
 	fixNotionLists(body, 'ol');
+	fixNestedHr(body);
 
 	addCheckboxes(body);
 	replaceTableOfContents(body);
 	formatDatabases(body);
 
+	if (info.preserveColoredText) {
+		matchColors(body);
+	}
+
 	let htmlString = body.innerHTML;
 	
 	// Simpler to just use the HTML string for this replacement
-	splitBrsInFormatting(htmlString, 'strong');
-	splitBrsInFormatting(htmlString, 'em');
-	
+	htmlString = splitBrsInFormatting(htmlString, 'strong');
+	htmlString = splitBrsInFormatting(htmlString, 'em');	
 
 	let markdownBody = htmlToMarkdown(htmlString);
-	if (info.singleLineBreaks) {
-		// Making sure that any blockquote is preceded by an empty line (otherwise messes up formatting with consecutive blockquotes / callouts)
-		markdownBody = markdownBody.replace(/\n\n(?!>)/g, '\n');
+	if (info.singleLineBreaks) {		
+		// (?!>) is making sure that any blockquote is preceded by an empty line (otherwise messes up formatting with consecutive blockquotes / callouts)
+		markdownBody = markdownBody.replace(/\n *\n(?!>)/g, '\n');
 	}
 	
 	markdownBody = escapeHashtags(markdownBody);
@@ -88,6 +94,113 @@ export async function readToMarkdown(info: NotionResolverInfo, file: ZipEntryFil
 	if (description) markdownBody = description + '\n\n' + markdownBody;
 
 	return serializeFrontMatter(frontMatter) + markdownBody;
+}
+
+function encodeSpaces(body: HTMLElement, info: NotionResolverInfo) {
+	// Notion shows spaces as written, so hard-code them before conversion to Markdown
+	for (let j = 0; j < body.childElementCount; j ++) {
+		const childEl = body.children[j];
+		if (childEl.tagName === 'A') continue;
+
+		if (childEl.classList.contains('indented')) {
+			// Add four spaces to the start of indented items
+			let firstChild = childEl.firstElementChild;
+			if (!firstChild) firstChild = childEl;
+			firstChild.innerHTML = `${info.replacements.indentedBlocks}` + firstChild.innerHTML;
+		}
+		if (childEl.childElementCount === 0 && childEl.textContent) {
+			let lines = childEl.innerHTML.split('\n');
+			for (let i = 0; i < lines.length; i ++) {
+				let line = lines[i]
+
+				let j = 0;
+				while (/ /.test(line[j])) {
+					j++;
+				}
+
+				if (j > 0) {
+					const startSpaces = []
+					for (let k = 0; k < j; k ++) {
+						startSpaces.push(info.replacements.leadingSpaces)
+					}
+					line = startSpaces.join('') + line.slice(j);
+				}
+				line = line.replace(/ /g, '&#32;').replace(/\t/g, '&emsp;');
+				lines[i] = line
+			}
+			childEl.innerHTML = lines.join('\n')
+		}
+		else if (childEl instanceof HTMLElement) encodeSpaces(childEl, info);
+	}
+}
+
+function fixNestedHr(body: HTMLElement) {
+	// HR items can show up in nested blocks in Notion. This is a fix to make nested HRs look better in Obsidian
+	const firstHR = body.firstElementChild;
+	if (firstHR?.tagName === 'HR') firstHR.replaceWith('<hr>\n');
+	const nestedHRs = body.findAll('hr');
+	for (let hr of nestedHRs.filter(hr => hr.parentElement && hr.parentElement !== body)) {
+		hr.replaceWith('<hr>');
+	}
+}
+
+function htmlToClassNames(el: HTMLElement) {
+	// Lift any formatting into the class of a formatted <span>
+	const classList: string[] = [];
+
+	function replaceClass(child: Element | null, className: string) {
+		if (child) {
+			classList.push(className);
+			hoistChildren(child);
+		}
+	}
+	
+	replaceClass(el.matchParent('[style*=border-bottom]'), 'cm-underline');
+	replaceClass(el.find('[style*=border-bottom]'), 'cm-underline');
+
+	replaceClass(el.matchParent('strong'), 'cm-strong');
+	replaceClass(el.find('strong'), 'cm-strong');
+
+	replaceClass(el.matchParent('em'), 'cm-italic');
+	replaceClass(el.find('em'), 'cm-italic');
+
+	return classList.join(' ');
+}
+
+// Notion's default colors
+const colorToRgb: Record<string, string> = {
+	gray: 'rgb(120, 119, 116)',
+	brown: 'rgb(159, 107, 83)',
+	orange: 'rgb(217, 115, 13)',
+	yellow: 'rgb(203, 145, 47)',
+	teal: 'rgb(68, 131, 97)',
+	blue: 'rgb(51, 126, 169)',
+	purple: 'rgb(144, 101, 176)',
+	pink: 'rgb(193, 76, 138)',
+	red: 'rgb(212, 76, 71)',
+};
+
+function matchColors(body: HTMLElement) {
+	// Notion supports colored text, so use HTML to preserve it.
+	const highlightedMarks = body.findAll('mark');  
+	const coloredMarks = highlightedMarks.filter(mark => mark.className.includes('highlight-'));
+	for (let mark of coloredMarks) {
+		const color = mark.className.match(/highlight-([\w]+)/)?.[1];
+		if (!color || !colorToRgb[color]) {
+			hoistChildren(mark);
+		}
+		else {
+			const previousElement = mark.previousElementSibling;
+			console.log('prev', previousElement);
+			
+			let previousText = '';
+			if (previousElement && previousElement.nodeType === previousElement.TEXT_NODE && previousElement.textContent) {
+				previousText = previousElement.textContent;
+				previousElement.remove();
+			}
+			mark.replaceWith(`<span class="${htmlToClassNames(mark)}" style="color: ${colorToRgb[color]};">${previousText}${mark.innerHTML.replace(/&#32;/g, ' ')}</span>`);
+		}
+	}
 }
 
 const typesMap: Record<NotionProperty['type'], NotionPropertyType[]> = {
@@ -310,13 +423,15 @@ function replaceNestedTags(body: HTMLElement, tag: 'strong' | 'em') {
 
 function splitBrsInFormatting(htmlString: string, tag: 'strong' | 'em') {
 	const tags = htmlString.match(new RegExp(`<${tag}>(.|\n)*</${tag}>`));
-	if (!tags) return;
+	if (!tags) return htmlString;
 	for (let tag of tags.filter((tag) => tag.contains('<br />'))) {
 		htmlString = htmlString.replace(
 			tag,
 			tag.split('<br />').join(`</${tag}><br /><${tag}>`)
 		);
 	}
+
+	return htmlString
 }
 
 function replaceTableOfContents(body: HTMLElement) {
@@ -328,12 +443,13 @@ function replaceTableOfContents(body: HTMLElement) {
 	}
 }
 
-function encodeNewlinesToBr(body: HTMLElement) {
-	body.innerHTML = body.innerHTML.replace(/\n/g, '<br />');
+function encodeNewlines(body: HTMLElement, info: NotionResolverInfo) {
+	body.innerHTML = body.innerHTML.replace(/\n/g, info.replacements.shiftEnter + '<br />');
+	
 	// Since <br /> is ignored in codeblocks, we replace with newlines
 	for (const block of body.findAll('code')) {
 		for (const br of block.findAll('br')) {
-			br.replaceWith('\n');
+			br.replaceWith('\n')
 		}
 	}
 }
@@ -361,13 +477,16 @@ function fixToggleHeadings(body: HTMLElement) {
 	const toggleHeadings = body.findAll('summary');
 	for (const heading of toggleHeadings) {
 		const style = heading.getAttribute('style');
-		if (!style) continue;
-
-		for (const key of Object.keys(fontSizeToHeadings)) {
-			if (style.includes(key)) {
-				heading.replaceWith(createEl(fontSizeToHeadings[key], { text: heading.textContent ?? '' }));
-				break;
+		if (style) {
+			for (const key of Object.keys(fontSizeToHeadings)) {
+				if (style.includes(key)) {
+					heading.replaceWith(createEl(fontSizeToHeadings[key], { text: heading.textContent ?? '' }));
+					break;
+				}
 			}
+		}
+		else {
+			hoistChildren(heading);
 		}
 	}
 }
